@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starfield Demo - Background Gradient Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        #starfield-canvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+            max-width: 300px;
+        }
+
+        .controls h2 {
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+
+        .control-group input[type="text"] {
+            width: 100%;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            opacity: 0.6;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 12px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="starfield-canvas"></canvas>
+
+    <div class="controls">
+        <h2>🌟 Starfield Controls</h2>
+
+        <div class="control-group">
+            <label>
+                Trail Effect: <span class="value-display" id="trail-value">0.30</span>
+            </label>
+            <input type="range" id="trail-effect" min="0" max="1" step="0.05" value="0.3">
+        </div>
+
+        <div class="control-group">
+            <label>
+                Speed: <span class="value-display" id="speed-value">0.60</span>
+            </label>
+            <input type="range" id="speed" min="0.1" max="5" step="0.1" value="0.6">
+        </div>
+
+        <div class="control-group">
+            <label>Gradient Center Color:</label>
+            <input type="color" id="color-center" value="#000000">
+        </div>
+
+        <div class="control-group">
+            <label>Gradient Edge Color:</label>
+            <input type="color" id="color-edge" value="#341b6f">
+            <button id="apply-gradient">Apply Colors</button>
+        </div>
+
+        <div class="info">
+            <strong>v2.0 Fix:</strong> Gradient now drawn on canvas (not CSS) so it's visible through trail effect. Uses canvas-native gradient API.
+        </div>
+
+        <div class="info">
+            <strong>FPS:</strong> <span id="fps-display">Calibrating...</span>
+        </div>
+    </div>
+
+    <script type="module">
+        import Starfield from './src/Starfield.js';
+
+        // Create starfield instance
+        const starfield = new Starfield('#starfield-canvas', {
+            starCount: 300,
+            speed: 0.6,
+            trailEffect: 0.3,
+            debug: true, // Enable console logging for testing
+            background: {
+                type: 'radial',
+                colors: [
+                    { stop: 0, color: '#000000' },
+                    { stop: 1, color: '#341b6f' }
+                ]
+            }
+        });
+
+        // Control handlers
+        const trailEffect = document.getElementById('trail-effect');
+        const trailValue = document.getElementById('trail-value');
+        const speed = document.getElementById('speed');
+        const speedValue = document.getElementById('speed-value');
+        const colorCenter = document.getElementById('color-center');
+        const colorEdge = document.getElementById('color-edge');
+        const applyGradient = document.getElementById('apply-gradient');
+
+        trailEffect.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            trailValue.textContent = value.toFixed(2);
+            starfield.updateConfig({ trailEffect: value });
+        });
+
+        speed.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            speedValue.textContent = value.toFixed(2);
+            starfield.updateConfig({ speed: value });
+        });
+
+        applyGradient.addEventListener('click', () => {
+            starfield.updateConfig({
+                background: {
+                    type: 'radial',
+                    colors: [
+                        { stop: 0, color: colorCenter.value },
+                        { stop: 1, color: colorEdge.value }
+                    ]
+                }
+            });
+        });
+
+        // Update FPS display
+        setInterval(() => {
+            const fps = starfield.getCurrentFPS();
+            const fpsDisplay = document.getElementById('fps-display');
+            if (fps > 0) {
+                fpsDisplay.textContent = fps + ' FPS';
+            }
+        }, 500);
+
+    </script>
+</body>
+</html>

@@ -1,3 +1,5 @@
+import { VERSION, REPO_URL } from './version.js';
+
 /**
  * Starfield - A customizable 3D starfield scroller animation
  * @class
@@ -9,6 +11,7 @@ export default class Starfield {
    */
   static defaults = {
     starCount: 'auto', // number or 'auto' for device detection
+    maxStarCount: 10000, // maximum stars for auto-optimization
     speed: 0.6,
     focalLength: 300,
     starColors: {
@@ -21,10 +24,15 @@ export default class Starfield {
       max: 2.0,
     },
     background: {
-      gradient: 'radial-gradient(ellipse at center, #001018 0%, #000 100%)',
+      type: 'radial',
+      colors: [
+        { stop: 0, color: '#000000' },  // Black (center) - RGB(0,0,0)
+        { stop: 1, color: '#341b6f' },  // Deep purple (edges) - RGB(52,27,111)
+      ],
     },
     trailEffect: 0.3, // opacity for motion blur (0-1)
     autoStart: true,
+    debug: false, // enable console logging for calibration/optimization
     deviceDetection: {
       mobile: 200, // star count for mobile devices
       desktop: 500, // star count for desktop devices
@@ -62,6 +70,24 @@ export default class Starfield {
     this.stars = [];
     this.animationId = null;
     this.isRunning = false;
+    this.backgroundGradient = null; // Cached gradient object
+
+    // Performance tracking for auto-optimization
+    this.performanceStats = {
+      frameTimestamps: [],
+      calibrationStartTime: null,
+      initialCalibrationComplete: false,
+      targetFPS: 60,
+      currentFPS: 0,
+      // Initial calibration (aggressive)
+      initialCalibrationDuration: 1000, // 1 second for fast initial convergence
+      initialCalibrationAttempts: 0,
+      maxInitialCalibrationAttempts: 8,
+      // Continuous optimization (conservative)
+      lastOptimizationTime: null,
+      optimizationInterval: 10000, // 10 seconds between adjustments
+      continuousOptimizationDuration: 3000, // 3 seconds for stable measurements
+    };
 
     // Determine star count
     this.starCount =
@@ -78,6 +104,9 @@ export default class Starfield {
     this._setupCanvas();
     this._boundResize = () => this.resize();
     window.addEventListener('resize', this._boundResize);
+
+    // Display version info
+    console.log(`Starfield v${VERSION} - ${REPO_URL}`);
 
     // Auto-start if configured
     if (this.config.autoStart) {
@@ -145,6 +174,10 @@ export default class Starfield {
       validate(config.starCount, 1, 10000, 'starCount');
     }
 
+    if (config.maxStarCount !== undefined) {
+      validate(config.maxStarCount, 100, 50000, 'maxStarCount');
+    }
+
     if (config.starSize) {
       if (config.starSize.min !== undefined) {
         validate(config.starSize.min, 0.1, 10, 'starSize.min');
@@ -195,11 +228,40 @@ export default class Starfield {
    */
   _setupCanvas() {
     this.resize();
+  }
 
-    // Apply background gradient if configured
-    if (this.config.background && this.config.background.gradient) {
-      this.canvas.style.background = this.config.background.gradient;
+  /**
+   * Draw background gradient on canvas
+   * @private
+   */
+  _drawBackgroundGradient() {
+    if (!this.config.background) return;
+
+    // Create and cache gradient object if not already cached
+    if (!this.backgroundGradient) {
+      const { type, colors } = this.config.background;
+
+      if (type === 'radial') {
+        this.backgroundGradient = this.ctx.createRadialGradient(
+          this.centerX,
+          this.centerY,
+          0,
+          this.centerX,
+          this.centerY,
+          Math.max(this.canvas.width, this.canvas.height)
+        );
+      }
+      // Future: add support for 'linear' and 'conic' gradients
+
+      // Apply color stops
+      colors.forEach(({ stop, color }) => {
+        this.backgroundGradient.addColorStop(stop, color);
+      });
     }
+
+    // Draw the cached gradient
+    this.ctx.fillStyle = this.backgroundGradient;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /**
@@ -207,6 +269,20 @@ export default class Starfield {
    * @private
    */
   _detectDeviceCapability() {
+    // Check for previously calibrated value
+    try {
+      const cached = localStorage.getItem('starfield-optimized-count');
+      if (cached) {
+        const count = parseInt(cached, 10);
+        if (!isNaN(count) && count >= 100 && count <= this.config.maxStarCount) {
+          return count;
+        }
+      }
+    } catch (e) {
+      // localStorage not available
+    }
+
+    // Fall back to device detection (current simplistic approach)
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const lowEnd =
       navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
@@ -224,6 +300,9 @@ export default class Starfield {
     this.canvas.height = window.innerHeight;
     this.centerX = this.canvas.width / 2;
     this.centerY = this.canvas.height / 2;
+    // Invalidate cached gradient since canvas size changed
+    // Next _drawBackgroundGradient() call will recreate with new dimensions
+    this.backgroundGradient = null;
   }
 
   /**
@@ -285,9 +364,32 @@ export default class Starfield {
   _render() {
     const { trailEffect, starColors } = this.config;
 
-    // Apply trail effect (motion blur) - inverted so 0=no trails, 1=long trails
-    this.ctx.fillStyle = `rgba(0, 0, 0, ${1 - trailEffect})`;
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // Create temporary canvas for previous frame if not exists
+    if (!this.tempCanvas) {
+      this.tempCanvas = document.createElement('canvas');
+      this.tempCtx = this.tempCanvas.getContext('2d');
+    }
+
+    // Ensure temp canvas matches size
+    if (this.tempCanvas.width !== this.canvas.width || this.tempCanvas.height !== this.canvas.height) {
+      this.tempCanvas.width = this.canvas.width;
+      this.tempCanvas.height = this.canvas.height;
+    }
+
+    // Save current canvas to temp canvas
+    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+    this.tempCtx.drawImage(this.canvas, 0, 0);
+
+    // Clear and draw fresh gradient
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this._drawBackgroundGradient();
+
+    // Draw previous frame on top with reduced opacity for trail effect
+    if (trailEffect > 0) {
+      this.ctx.globalAlpha = trailEffect; // Use trailEffect directly (0=no trails, 1=full trails)
+      this.ctx.drawImage(this.tempCanvas, 0, 0);
+      this.ctx.globalAlpha = 1.0; // Reset
+    }
 
     // Render each star
     this.stars.forEach((star) => {
@@ -311,9 +413,211 @@ export default class Starfield {
   _animate() {
     if (!this.isRunning) return;
 
+    // Track frame timestamp for FPS measurement
+    const now = performance.now();
+    this.performanceStats.frameTimestamps.push(now);
+
+    // Keep only last 120 frames for rolling FPS calculation (2 seconds at 60 FPS)
+    if (this.performanceStats.frameTimestamps.length > 120) {
+      this.performanceStats.frameTimestamps.shift();
+    }
+
+    // Calculate current FPS continuously from rolling window
+    if (this.performanceStats.frameTimestamps.length >= 10) {
+      const timestamps = this.performanceStats.frameTimestamps;
+      let totalInterval = 0;
+      for (let i = 1; i < timestamps.length; i++) {
+        totalInterval += timestamps[i] - timestamps[i - 1];
+      }
+      const avgInterval = totalInterval / (timestamps.length - 1);
+      this.performanceStats.currentFPS = Math.round(1000 / avgInterval);
+    }
+
+    // Start calibration timer on first frame
+    if (!this.performanceStats.calibrationStartTime) {
+      this.performanceStats.calibrationStartTime = now;
+    }
+
+    // Run optimization (both initial calibration and continuous optimization)
+    this._runOptimization(now);
+
     this._update();
     this._render();
     this.animationId = requestAnimationFrame(() => this._animate());
+  }
+
+  /**
+   * Run FPS optimization (both initial calibration and continuous optimization)
+   * @private
+   */
+  _runOptimization(now) {
+    const stats = this.performanceStats;
+    const isInitialPhase = !stats.initialCalibrationComplete;
+
+    // Determine measurement duration based on phase
+    const measurementDuration = isInitialPhase
+      ? stats.initialCalibrationDuration
+      : stats.continuousOptimizationDuration;
+
+    const elapsed = now - stats.calibrationStartTime;
+
+    // Wait for measurement period to complete
+    if (elapsed < measurementDuration) {
+      return;
+    }
+
+    // For continuous optimization, enforce minimum interval between adjustments
+    if (!isInitialPhase) {
+      if (stats.lastOptimizationTime && (now - stats.lastOptimizationTime) < stats.optimizationInterval) {
+        // Reset timer for next measurement window
+        stats.calibrationStartTime = now;
+        return;
+      }
+    }
+
+    // Calculate average FPS from collected timestamps
+    const timestamps = stats.frameTimestamps;
+    if (timestamps.length < 10) return; // Need enough samples
+
+    // Calculate FPS from frame intervals
+    let totalInterval = 0;
+    for (let i = 1; i < timestamps.length; i++) {
+      totalInterval += timestamps[i] - timestamps[i - 1];
+    }
+    const avgInterval = totalInterval / (timestamps.length - 1);
+    const measuredFPS = 1000 / avgInterval;
+
+    const targetFPS = stats.targetFPS;
+    const fpsRatio = measuredFPS / targetFPS;
+    const maxStars = this.config.maxStarCount;
+
+    if (isInitialPhase) {
+      // INITIAL CALIBRATION (aggressive)
+
+      // Check if we've reached max attempts or are within acceptable range
+      const isWithinRange = fpsRatio >= 0.9 && fpsRatio <= 1.5;
+      const maxAttemptsReached = stats.initialCalibrationAttempts >= stats.maxInitialCalibrationAttempts;
+
+      if (isWithinRange || maxAttemptsReached) {
+        // Mark initial calibration complete
+        stats.initialCalibrationComplete = true;
+        stats.lastOptimizationTime = now;
+
+        if (this.config.debug) {
+          if (maxAttemptsReached && !isWithinRange) {
+            console.log(
+              `Initial calibration: Max attempts reached (${stats.maxInitialCalibrationAttempts}). Final: ${measuredFPS.toFixed(1)} FPS with ${this.starCount} stars. Switching to continuous optimization.`
+            );
+          } else {
+            console.log(
+              `Initial calibration complete: ${measuredFPS.toFixed(1)} FPS, ${this.starCount} stars. Continuous optimization active.`
+            );
+          }
+        }
+
+        // Store final value in localStorage for future sessions
+        try {
+          localStorage.setItem('starfield-optimized-count', this.starCount.toString());
+        } catch (e) {
+          // localStorage not available
+        }
+
+        // Reset timer for continuous optimization
+        stats.calibrationStartTime = now;
+        return;
+      }
+
+      // Continue initial calibration - adjust star count
+      stats.initialCalibrationAttempts++;
+
+      // Dynamic multiplier: more aggressive when further from target
+      // Formula: 0.75 + (min(fpsRatio, 4) / 20)
+      // Results: 1.5x→0.825, 2x→0.85, 3x→0.90, 4x+→0.95
+      const aggressiveness = 0.75 + (Math.min(fpsRatio, 4) / 20);
+      const newStarCount = Math.round(this.starCount * (fpsRatio * aggressiveness));
+      const clampedCount = Math.max(100, Math.min(maxStars, newStarCount));
+
+      // Check if we've hit max stars and can't increase further
+      if (clampedCount === maxStars && this.starCount === maxStars && fpsRatio > 1.5) {
+        stats.initialCalibrationComplete = true;
+        stats.lastOptimizationTime = now;
+        if (this.config.debug) {
+          console.log(
+            `Initial calibration complete: Max star count reached (${maxStars}), ${measuredFPS.toFixed(1)} FPS. Continuous optimization active.`
+          );
+        }
+        try {
+          localStorage.setItem('starfield-optimized-count', maxStars.toString());
+        } catch (e) {
+          // localStorage not available
+        }
+        stats.calibrationStartTime = now;
+        return;
+      }
+
+      if (this.config.debug) {
+        console.log(
+          `Initial calibration (${stats.initialCalibrationAttempts}/${stats.maxInitialCalibrationAttempts}): ${measuredFPS.toFixed(1)} FPS, adjusting ${this.starCount} → ${clampedCount} stars`
+        );
+      }
+
+      // Reset calibration timer for next measurement (keep timestamps for rolling window)
+      stats.calibrationStartTime = now;
+
+      // Apply adjustment (this will restart animation)
+      this.updateConfig({ starCount: clampedCount });
+
+    } else {
+      // CONTINUOUS OPTIMIZATION (conservative)
+
+      // Wider acceptable range for continuous mode (51-78 FPS for 60 target)
+      const isWithinRange = fpsRatio >= 0.85 && fpsRatio <= 1.3;
+
+      if (isWithinRange) {
+        // Performance is acceptable, no adjustment needed
+        stats.calibrationStartTime = now;
+        return;
+      }
+
+      // Calculate adjustment with conservative multiplier
+      const conservativeMultiplier = 0.9;
+      let newStarCount = Math.round(this.starCount * (fpsRatio * conservativeMultiplier));
+
+      // Limit adjustment to ±20% per step to avoid oscillation
+      const maxChange = Math.round(this.starCount * 0.2);
+      const minStars = this.starCount - maxChange;
+      const maxStarsThisStep = this.starCount + maxChange;
+      newStarCount = Math.max(minStars, Math.min(maxStarsThisStep, newStarCount));
+
+      const clampedCount = Math.max(100, Math.min(maxStars, newStarCount));
+
+      // Skip if change is too small (< 5%)
+      const changePercent = Math.abs((clampedCount - this.starCount) / this.starCount);
+      if (changePercent < 0.05) {
+        stats.calibrationStartTime = now;
+        return;
+      }
+
+      if (this.config.debug) {
+        console.log(
+          `Continuous optimization: ${measuredFPS.toFixed(1)} FPS, adjusting ${this.starCount} → ${clampedCount} stars`
+        );
+      }
+
+      // Update timers
+      stats.calibrationStartTime = now;
+      stats.lastOptimizationTime = now;
+
+      // Store updated value
+      try {
+        localStorage.setItem('starfield-optimized-count', clampedCount.toString());
+      } catch (e) {
+        // localStorage not available
+      }
+
+      // Apply adjustment
+      this.updateConfig({ starCount: clampedCount });
+    }
   }
 
   /**
@@ -352,15 +656,22 @@ export default class Starfield {
 
     // Recalculate star count if changed
     if (newConfig.starCount !== undefined) {
+      const oldStarCount = this.starCount;
       this.starCount =
         this.config.starCount === 'auto'
           ? this._detectDeviceCapability()
           : this.config.starCount;
 
-      // Recreate stars with new count
-      this.stars = [];
-      for (let i = 0; i < this.starCount; i++) {
-        this.stars.push(this._createStar());
+      // Preserve existing stars, only add/remove as needed
+      if (this.starCount > oldStarCount) {
+        // Increasing: add new stars
+        const starsToAdd = this.starCount - oldStarCount;
+        for (let i = 0; i < starsToAdd; i++) {
+          this.stars.push(this._createStar());
+        }
+      } else if (this.starCount < oldStarCount) {
+        // Decreasing: remove stars from end
+        this.stars.splice(this.starCount);
       }
     } else if (newConfig.starColors || newConfig.starSize) {
       // Update existing stars with new colors/sizes
@@ -379,9 +690,9 @@ export default class Starfield {
       });
     }
 
-    // Reapply background if changed
+    // Invalidate gradient cache if background changed
     if (newConfig.background !== undefined) {
-      this._setupCanvas();
+      this.backgroundGradient = null;
     }
 
     if (wasRunning) this.start();
@@ -395,5 +706,13 @@ export default class Starfield {
     window.removeEventListener('resize', this._boundResize);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.stars = [];
+  }
+
+  /**
+   * Get current measured FPS from rolling 120-frame window
+   * @returns {number} Current FPS (0 if fewer than 10 frames collected)
+   */
+  getCurrentFPS() {
+    return this.performanceStats.currentFPS;
   }
 }
