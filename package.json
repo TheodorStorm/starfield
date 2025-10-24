@@ -1,6 +1,6 @@
 {
   "name": "@byteventures/starfield",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A customizable 3D starfield scroller animation for web projects",
   "type": "module",
   "main": "./dist/index.js",
@@ -31,7 +31,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TheodorStorm/starfield.git"
+    "url": "git+https://github.com/TheodorStorm/starfield.git"
   },
   "engines": {
     "node": ">=14.0.0"
