@@ -644,6 +644,7 @@ export default class Starfield {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+    this.lastFrameTime = null; // Reset for clean restart
   }
 
   /**
