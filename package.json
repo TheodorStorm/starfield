@@ -1,0 +1,39 @@
+{
+  "name": "@byteventures/starfield",
+  "version": "1.0.2",
+  "description": "A customizable 3D starfield scroller animation for web projects",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "mkdir -p dist && cp src/*.js dist/ && cp src/*.d.ts dist/",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "starfield",
+    "animation",
+    "canvas",
+    "3d",
+    "space",
+    "background",
+    "scroller"
+  ],
+  "author": "Theodor Storm <theodor@byteventures.se>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheodorStorm/starfield.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
