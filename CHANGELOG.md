@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2025-10-24
+
+### Documentation
+- Added comprehensive CHANGELOG.md with full version history
+- Updated README.md with v2.0.0+ gradient API format and examples
+- Added migration guide for upgrading from v1.x to v2.x
+- Added performance optimization documentation
+- Updated TypeScript definitions with `@since` tags for breaking changes
+- Corrected default gradient colors in all documentation
+
 ## [2.0.2] - 2025-10-24
 
 ### Fixed
@@ -115,6 +125,7 @@ const starfield = new Starfield('#canvas', {
 - TypeScript support with full type definitions
 - ES Module distribution
 
+[2.0.3]: https://github.com/byteventures/starfield/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/byteventures/starfield/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/byteventures/starfield/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/byteventures/starfield/compare/v1.0.3...v2.0.0
