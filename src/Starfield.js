@@ -286,7 +286,7 @@ export default class Starfield {
     const { trailEffect, starColors } = this.config;
 
     // Apply trail effect (motion blur) - inverted so 0=no trails, 1=long trails
-    this.ctx.fillStyle = `rgba(0, 0, 10, ${1 - trailEffect})`;
+    this.ctx.fillStyle = `rgba(0, 0, 0, ${1 - trailEffect})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // Render each star
