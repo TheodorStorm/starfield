@@ -71,6 +71,7 @@ export default class Starfield {
     this.animationId = null;
     this.isRunning = false;
     this.backgroundGradient = null; // Cached gradient object
+    this.lastFrameTime = null; // For delta time calculation
 
     // Performance tracking for auto-optimization
     this.performanceStats = {
@@ -338,11 +339,13 @@ export default class Starfield {
   }
 
   /**
-   * Update star positions
+   * Update star positions with delta time compensation
    * @private
+   * @param {number} deltaTime - Time elapsed since last frame in milliseconds
    */
-  _update() {
-    const speed = this.config.speed;
+  _update(deltaTime) {
+    // Normalize to 60 FPS baseline (16.67ms per frame) for frame-rate independent movement
+    const speed = this.config.speed * (deltaTime / 16.67);
     for (let i = 0; i < this.stars.length; i++) {
       const star = this.stars[i];
       star.z -= speed;
@@ -413,8 +416,11 @@ export default class Starfield {
   _animate() {
     if (!this.isRunning) return;
 
-    // Track frame timestamp for FPS measurement
+    // Track frame timestamp for FPS measurement and delta time
     const now = performance.now();
+    const deltaTime = this.lastFrameTime ? now - this.lastFrameTime : 16.67; // Default to 60 FPS baseline
+    this.lastFrameTime = now;
+
     this.performanceStats.frameTimestamps.push(now);
 
     // Keep only last 120 frames for rolling FPS calculation (2 seconds at 60 FPS)
@@ -441,7 +447,7 @@ export default class Starfield {
     // Run optimization (both initial calibration and continuous optimization)
     this._runOptimization(now);
 
-    this._update();
+    this._update(deltaTime);
     this._render();
     this.animationId = requestAnimationFrame(() => this._animate());
   }
