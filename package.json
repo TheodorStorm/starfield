@@ -1,6 +1,6 @@
 {
   "name": "@byteventures/starfield",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A customizable 3D starfield scroller animation for web projects",
   "type": "module",
   "main": "./dist/index.js",
