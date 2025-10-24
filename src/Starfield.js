@@ -6,6 +6,13 @@ import { VERSION, REPO_URL } from './version.js';
  */
 export default class Starfield {
   /**
+   * localStorage key for storing optimized star count
+   * @private
+   */
+  static STORAGE_KEY = '@byteventures/starfield:optimized-count';
+  static LEGACY_STORAGE_KEY = 'starfield-optimized-count'; // For migration
+
+  /**
    * Default configuration options
    * @private
    */
@@ -272,7 +279,19 @@ export default class Starfield {
   _detectDeviceCapability() {
     // Check for previously calibrated value
     try {
-      const cached = localStorage.getItem('starfield-optimized-count');
+      // Try new namespaced key first
+      let cached = localStorage.getItem(Starfield.STORAGE_KEY);
+
+      // Fall back to legacy key for migration
+      if (!cached) {
+        cached = localStorage.getItem(Starfield.LEGACY_STORAGE_KEY);
+        if (cached) {
+          // Migrate to new key
+          localStorage.setItem(Starfield.STORAGE_KEY, cached);
+          localStorage.removeItem(Starfield.LEGACY_STORAGE_KEY);
+        }
+      }
+
       if (cached) {
         const count = parseInt(cached, 10);
         if (!isNaN(count) && count >= 100 && count <= this.config.maxStarCount) {
@@ -523,7 +542,7 @@ export default class Starfield {
 
         // Store final value in localStorage for future sessions
         try {
-          localStorage.setItem('starfield-optimized-count', this.starCount.toString());
+          localStorage.setItem(Starfield.STORAGE_KEY, this.starCount.toString());
         } catch (e) {
           // localStorage not available
         }
@@ -553,7 +572,7 @@ export default class Starfield {
           );
         }
         try {
-          localStorage.setItem('starfield-optimized-count', maxStars.toString());
+          localStorage.setItem(Starfield.STORAGE_KEY, maxStars.toString());
         } catch (e) {
           // localStorage not available
         }
@@ -616,7 +635,7 @@ export default class Starfield {
 
       // Store updated value
       try {
-        localStorage.setItem('starfield-optimized-count', clampedCount.toString());
+        localStorage.setItem(Starfield.STORAGE_KEY, clampedCount.toString());
       } catch (e) {
         // localStorage not available
       }
