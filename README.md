@@ -62,9 +62,59 @@ const starfield = new Starfield('#myCanvas');
 </html>
 ```
 
+## Migration Guide
+
+### Upgrading from v1.x to v2.x
+
+**Breaking Change: Background Gradient Configuration**
+
+Version 2.0.0 changed the background gradient configuration from CSS-based to canvas-native API for proper interaction with the trail effect.
+
+#### Migration Steps:
+
+**If using default gradient:**
+No changes needed! Just update the package and the new default gradient will be applied automatically.
+
+**If using custom gradient:**
+
+1. **Old (v1.x):**
+```javascript
+new Starfield('#canvas', {
+  background: {
+    gradient: 'radial-gradient(ellipse at center, #ff0000 0%, #0000ff 100%)'
+  }
+});
+```
+
+2. **New (v2.0.0+):**
+```javascript
+new Starfield('#canvas', {
+  background: {
+    type: 'radial',
+    colors: [
+      { stop: 0, color: '#ff0000' },  // center (was 0% in CSS)
+      { stop: 1, color: '#0000ff' }   // edge (was 100% in CSS)
+    ]
+  }
+});
+```
+
+#### Key Changes:
+- `gradient` property replaced with `type` and `colors` structure
+- Color stops use decimal values (0-1) instead of percentages (0%-100%)
+- Default gradient changed from blue-tinted (#001018 → #000) to purple-tinted (#000000 → #341b6f)
+
+#### If disabling background:
+```javascript
+// Still works the same in v2.x
+background: false
+```
+
+For more details, see [CHANGELOG.md](./CHANGELOG.md).
+
 ## Configuration Options
 
-All options are optional. The defaults create a blue-tinted starfield optimized for most use cases.
+All options are optional. The defaults create a colorful starfield with blue-purple stars and a black-to-purple gradient background, optimized for most use cases.
 
 ```javascript
 const starfield = new Starfield('#myCanvas', {
@@ -90,9 +140,13 @@ const starfield = new Starfield('#myCanvas', {
     max: 2.0,            // maximum size (default: 2.0)
   },
 
-  // Background gradient
+  // Background gradient (v2.0.0+ format)
   background: {
-    gradient: 'radial-gradient(ellipse at center, #001018 0%, #000 100%)',
+    type: 'radial',                    // gradient type (default: 'radial')
+    colors: [
+      { stop: 0, color: '#000000' },   // center color (default: black)
+      { stop: 1, color: '#341b6f' },   // edge color (default: deep purple)
+    ],
   },
   // Or disable background:
   // background: false,
@@ -108,6 +162,12 @@ const starfield = new Starfield('#myCanvas', {
     mobile: 200,         // star count for mobile (default: 200)
     desktop: 500,        // star count for desktop (default: 500)
   },
+
+  // Enable debug logging for performance optimization
+  debug: false, // boolean (default: false)
+
+  // Maximum star count for auto-optimization
+  maxStarCount: 10000, // number (default: 10000)
 });
 ```
 
@@ -142,6 +202,14 @@ starfield.updateConfig({
   speed: 1.2,
   starColors: { hue: [0, 60] }, // Red/orange stars
 });
+```
+
+### `getCurrentFPS()`
+Get current frames per second (returns rolling average).
+
+```javascript
+const fps = starfield.getCurrentFPS();
+console.log(`Current FPS: ${fps}`);
 ```
 
 ### `destroy()`
@@ -321,12 +389,44 @@ Tested on:
 - Safari 14+
 - Edge 90+
 
-## Performance Tips
+## Performance & Optimization
 
-1. **Mobile Optimization**: Use `starCount: 'auto'` to automatically reduce stars on mobile devices
-2. **Trail Effect**: Lower `trailEffect` values (shorter trails) improve performance but reduce visual smoothness
-3. **Star Count**: Fewer stars = better performance. Start low and increase if needed
-4. **Background**: Set `background: false` if you have your own background
+### Automatic FPS Optimization (v2.0.0+)
+
+The library includes an intelligent auto-optimization system that automatically adjusts star count to maintain smooth 60 FPS animation:
+
+**Two-Phase Optimization:**
+1. **Initial Calibration** (1-second measurements, up to 8 attempts)
+   - Aggressively finds optimal star count on first load
+   - Quickly adapts to device capabilities
+
+2. **Continuous Optimization** (3-second measurements every 10 seconds)
+   - Conservatively adjusts during runtime
+   - Maintains performance as conditions change
+
+**localStorage Caching:**
+The optimized star count is cached in localStorage for instant adaptation on repeat visits. Each domain/path gets its own cached value.
+
+**Debug Mode:**
+Enable debug logging to monitor optimization in action:
+
+```javascript
+new Starfield('#canvas', {
+  debug: true,  // Logs FPS measurements and star count adjustments
+});
+```
+
+**Frame-Rate Independence (v2.0.1+):**
+Animation speed is normalized using delta time compensation, ensuring consistent motion across different refresh rates (60Hz, 120Hz, 144Hz, etc.).
+
+### Performance Tips
+
+1. **Use Auto Star Count**: Set `starCount: 'auto'` (default) to let the library optimize automatically
+2. **Monitor Performance**: Enable `debug: true` to see real-time FPS and optimization decisions
+3. **Trail Effect**: Lower `trailEffect` values improve performance but reduce visual smoothness
+4. **Manual Override**: Set specific `starCount` if you need consistent visuals across all devices
+5. **Background Gradient**: Set `background: false` if you have your own background to reduce rendering overhead
+6. **Max Star Cap**: Adjust `maxStarCount` if you want to limit the maximum number of stars (default: 10000)
 
 ## License
 

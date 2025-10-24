@@ -39,14 +39,36 @@ export interface StarSize {
 }
 
 /**
+ * Color stop for background gradient
+ */
+export interface BackgroundColorStop {
+  /**
+   * Position in gradient (0-1, where 0 is center and 1 is edge for radial gradients)
+   */
+  stop: number;
+
+  /**
+   * Color at this stop (hex, rgb, rgba, or named CSS color)
+   */
+  color: string;
+}
+
+/**
  * Configuration for background gradient
+ * @since 2.0.0 - Breaking change: replaced CSS gradient string with object structure
  */
 export interface Background {
   /**
-   * CSS gradient string or false to disable
-   * @default 'radial-gradient(ellipse at center, #001018 0%, #000 100%)'
+   * Gradient type
+   * @default 'radial'
    */
-  gradient: string | false;
+  type: 'radial';
+
+  /**
+   * Color stops for the gradient
+   * @default [{ stop: 0, color: '#000000' }, { stop: 1, color: '#341b6f' }]
+   */
+  colors: BackgroundColorStop[];
 }
 
 /**
@@ -119,6 +141,18 @@ export interface StarfieldOptions {
    * Device-specific star count configuration
    */
   deviceDetection?: Partial<DeviceDetection>;
+
+  /**
+   * Enable debug logging for performance optimization
+   * @default false
+   */
+  debug?: boolean;
+
+  /**
+   * Maximum star count cap for auto-optimization
+   * @default 10000
+   */
+  maxStarCount?: number;
 }
 
 /**
@@ -171,6 +205,13 @@ export default class Starfield {
    * @param newConfig - Partial configuration to merge with current config
    */
   updateConfig(newConfig: Partial<StarfieldOptions>): void;
+
+  /**
+   * Get current frames per second (FPS)
+   * Returns rolling average FPS based on recent frame times
+   * @returns Current FPS or 0 if animation is not running
+   */
+  getCurrentFPS(): number;
 
   /**
    * Clean up and destroy the starfield instance

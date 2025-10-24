@@ -81,15 +81,16 @@ All options are optional with sensible defaults:
 - `starCount`: Number or 'auto' for device detection (default: 'auto')
 - `speed`: Animation speed multiplier (default: 0.6)
 - `focalLength`: 3D perspective depth (default: 300)
-- `starColors.hue`: Single number or [min, max] range (default: [180, 260] for blue)
+- `starColors.hue`: Single number or [min, max] range (default: [180, 260] for blue-purple stars)
 - `starColors.saturation`: 0-100 (default: 70)
 - `starColors.lightness`: 0-100 (default: 90)
 - `starSize.min/max`: Star size range (default: 0.5-2.0)
-- `background`: Gradient config object or false to disable
+- `background`: Gradient config object (v2.0.0+: `{ type: 'radial', colors: [{ stop, color }] }`) or false to disable (default: black #000000 center to deep purple #341b6f edges)
 - `trailEffect`: Motion blur intensity 0-1 (default: 0.3)
 - `autoStart`: Auto-start animation (default: true)
 - `deviceDetection.mobile/desktop`: Star counts for device types (default: 200/500)
 - `debug`: Enable console logging for performance optimization (default: false)
+- `maxStarCount`: Maximum star count cap for auto-optimization (default: 10000)
 
 ## Release Process
 
