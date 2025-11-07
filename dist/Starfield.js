@@ -446,9 +446,12 @@ export default class Starfield {
       this.tempCtx.fill();
     });
 
-    // Step 3: Copy new stars to trailBuffer for next frame's trails
-    // Use 'source-over' so new stars composite on top of decayed trails
+    // Step 3: Add new stars to trailBuffer using 'lighter' blend mode
+    // 'lighter' mode prevents alpha feedback loop that occurs with 'source-over'
+    // when stars overlap their own trails (additive blending instead of alpha compositing)
+    this.trailBufferCtx.globalCompositeOperation = 'lighter';
     this.trailBufferCtx.drawImage(this.tempCanvas, 0, 0);
+    this.trailBufferCtx.globalCompositeOperation = 'source-over';
 
     // Step 4: Compose final frame on main canvas (gradient + trails + new stars)
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
