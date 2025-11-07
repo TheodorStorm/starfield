@@ -409,7 +409,7 @@ export default class Starfield {
       this.tempCanvas.height = this.canvas.height;
     }
 
-    // Step 1-2: Decay trailBuffer and add new stars
+    // Step 1: Decay trailBuffer (do NOT add new stars to it)
     if (trailEffect > 0 && this.trailBuffer.width > 0) {
       // Save old trails at reduced opacity
       const savedTrails = document.createElement('canvas');
@@ -425,13 +425,14 @@ export default class Starfield {
       this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
       this.trailBufferCtx.globalCompositeOperation = 'copy';
       this.trailBufferCtx.drawImage(savedTrails, 0, 0);
-      this.trailBufferCtx.globalCompositeOperation = 'source-over'; // Reset for drawing new stars
+      this.trailBufferCtx.globalCompositeOperation = 'source-over';
     } else {
       // No trails, just clear
       this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
     }
 
-    // Draw new stars into trail buffer
+    // Step 2: Draw new stars to tempCanvas (separate from trails to prevent feedback loop)
+    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
     this.stars.forEach((star) => {
       const p = this._project(star.x, star.y, star.z);
       if (p.scale <= 0) return;
@@ -439,20 +440,20 @@ export default class Starfield {
       const size = star.baseSize * p.scale;
       const brightness = Math.min(1, p.scale * 0.7);
 
-      this.trailBufferCtx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
-      this.trailBufferCtx.beginPath();
-      this.trailBufferCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
-      this.trailBufferCtx.fill();
+      this.tempCtx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
+      this.tempCtx.beginPath();
+      this.tempCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      this.tempCtx.fill();
     });
 
-    // Step 3-4: Compose final frame on tempCanvas (gradient + trails)
-    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
-    this._drawBackgroundGradient(this.tempCtx);
-    this.tempCtx.drawImage(this.trailBuffer, 0, 0);
+    // Step 3: Copy new stars to trailBuffer for next frame's trails
+    // Use 'source-over' so new stars composite on top of decayed trails
+    this.trailBufferCtx.drawImage(this.tempCanvas, 0, 0);
 
-    // Step 5: Copy to main canvas
+    // Step 4: Compose final frame on main canvas (gradient + trails + new stars)
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.drawImage(this.tempCanvas, 0, 0);
+    this._drawBackgroundGradient(this.ctx);
+    this.ctx.drawImage(this.trailBuffer, 0, 0);
   }
 
   /**
