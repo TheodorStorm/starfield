@@ -428,7 +428,8 @@ export default class Starfield {
       const size = star.baseSize * p.scale;
       const brightness = Math.min(1, p.scale * 0.7);
 
-      this.ctx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
+      // Test: Draw stars at full opacity to eliminate alpha blending artifacts
+      this.ctx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, 1.0)`;
       this.ctx.beginPath();
       this.ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
       this.ctx.fill();
