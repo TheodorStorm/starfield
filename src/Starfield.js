@@ -411,6 +411,13 @@ export default class Starfield {
       this.ctx.globalAlpha = trailEffect; // Use trailEffect directly (0=no trails, 1=full trails)
       this.ctx.drawImage(this.tempCanvas, 0, 0);
       this.ctx.globalAlpha = 1.0; // Reset
+
+      // Apply subtle background pull to eliminate accumulation artifacts
+      // This ensures trails fully decay to background instead of leaving permanent residue
+      // caused by 8-bit color quantization rounding errors
+      this.ctx.globalAlpha = 0.02; // 2% background "pull" per frame
+      this._drawBackgroundGradient();
+      this.ctx.globalAlpha = 1.0; // Reset
     }
 
     // Render each star
