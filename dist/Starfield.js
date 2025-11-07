@@ -386,7 +386,7 @@ export default class Starfield {
   _render() {
     const { trailEffect, starColors } = this.config;
 
-    // Create temporary canvas for previous frame if not exists
+    // Create temporary canvas for stars only (no gradient) if not exists
     if (!this.tempCanvas) {
       this.tempCanvas = document.createElement('canvas');
       this.tempCtx = this.tempCanvas.getContext('2d');
@@ -398,29 +398,23 @@ export default class Starfield {
       this.tempCanvas.height = this.canvas.height;
     }
 
-    // Save current canvas to temp canvas
-    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
-    this.tempCtx.drawImage(this.canvas, 0, 0);
-
-    // Clear and draw fresh gradient
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this._drawBackgroundGradient();
-
-    // Draw previous frame on top with reduced opacity for trail effect
+    // If we have trail effect, save old stars at reduced opacity for trails
+    let trailCanvas = null;
     if (trailEffect > 0) {
-      this.ctx.globalAlpha = trailEffect; // Use trailEffect directly (0=no trails, 1=full trails)
-      this.ctx.drawImage(this.tempCanvas, 0, 0);
-      this.ctx.globalAlpha = 1.0; // Reset
+      trailCanvas = document.createElement('canvas');
+      trailCanvas.width = this.canvas.width;
+      trailCanvas.height = this.canvas.height;
+      const trailCtx = trailCanvas.getContext('2d');
 
-      // Apply subtle background pull to eliminate accumulation artifacts
-      // This ensures trails fully decay to background instead of leaving permanent residue
-      // caused by 8-bit color quantization rounding errors
-      this.ctx.globalAlpha = 0.05; // 5% background "pull" per frame
-      this._drawBackgroundGradient();
-      this.ctx.globalAlpha = 1.0; // Reset
+      // Copy old stars at reduced opacity (tempCanvas contains only stars, no gradient)
+      trailCtx.globalAlpha = trailEffect;
+      trailCtx.drawImage(this.tempCanvas, 0, 0);
+      trailCtx.globalAlpha = 1.0;
     }
 
-    // Render each star
+    // Clear temp canvas and draw new stars on it (transparent background, no gradient)
+    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+
     this.stars.forEach((star) => {
       const p = this._project(star.x, star.y, star.z);
       if (p.scale <= 0) return;
@@ -428,12 +422,24 @@ export default class Starfield {
       const size = star.baseSize * p.scale;
       const brightness = Math.min(1, p.scale * 0.7);
 
-      // Test: Draw stars at full opacity to eliminate alpha blending artifacts
-      this.ctx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, 1.0)`;
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-      this.ctx.fill();
+      this.tempCtx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
+      this.tempCtx.beginPath();
+      this.tempCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      this.tempCtx.fill();
     });
+
+    // Now compose the final frame on main canvas
+    // 1. Clear and draw fresh gradient (never composited with itself)
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this._drawBackgroundGradient();
+
+    // 2. Draw old stars (trails) if enabled
+    if (trailEffect > 0 && trailCanvas) {
+      this.ctx.drawImage(trailCanvas, 0, 0);
+    }
+
+    // 3. Draw new stars on top
+    this.ctx.drawImage(this.tempCanvas, 0, 0);
   }
 
   /**
