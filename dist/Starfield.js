@@ -241,8 +241,9 @@ export default class Starfield {
   /**
    * Draw background gradient on canvas
    * @private
+   * @param {CanvasRenderingContext2D} ctx - Context to draw on (defaults to main canvas context)
    */
-  _drawBackgroundGradient() {
+  _drawBackgroundGradient(ctx = this.ctx) {
     if (!this.config.background) return;
 
     // Create and cache gradient object if not already cached
@@ -250,7 +251,7 @@ export default class Starfield {
       const { type, colors } = this.config.background;
 
       if (type === 'radial') {
-        this.backgroundGradient = this.ctx.createRadialGradient(
+        this.backgroundGradient = ctx.createRadialGradient(
           this.centerX,
           this.centerY,
           0,
@@ -268,8 +269,8 @@ export default class Starfield {
     }
 
     // Draw the cached gradient
-    this.ctx.fillStyle = this.backgroundGradient;
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.fillStyle = this.backgroundGradient;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /**
@@ -386,41 +387,48 @@ export default class Starfield {
   _render() {
     const { trailEffect, starColors } = this.config;
 
-    // Create temporary canvas for stars only (no gradient) if not exists
+    // Create trail buffer (stores only stars on transparent background)
+    if (!this.trailBuffer) {
+      this.trailBuffer = document.createElement('canvas');
+      this.trailBufferCtx = this.trailBuffer.getContext('2d');
+    }
+
+    // Create temp canvas for final composition
     if (!this.tempCanvas) {
       this.tempCanvas = document.createElement('canvas');
       this.tempCtx = this.tempCanvas.getContext('2d');
     }
 
-    // Ensure temp canvas matches size
+    // Ensure canvases match size
+    if (this.trailBuffer.width !== this.canvas.width || this.trailBuffer.height !== this.canvas.height) {
+      this.trailBuffer.width = this.canvas.width;
+      this.trailBuffer.height = this.canvas.height;
+    }
     if (this.tempCanvas.width !== this.canvas.width || this.tempCanvas.height !== this.canvas.height) {
       this.tempCanvas.width = this.canvas.width;
       this.tempCanvas.height = this.canvas.height;
     }
 
-    // Save old stars (with accumulated trails) at reduced opacity
-    let savedStars = null;
-    if (trailEffect > 0 && this.tempCanvas.width > 0) {
-      savedStars = document.createElement('canvas');
-      savedStars.width = this.canvas.width;
-      savedStars.height = this.canvas.height;
-      const savedCtx = savedStars.getContext('2d');
-
-      // Copy tempCanvas at reduced opacity to create decay
+    // Step 1-2: Decay trailBuffer and add new stars
+    if (trailEffect > 0 && this.trailBuffer.width > 0) {
+      // Save old trails at reduced opacity
+      const savedTrails = document.createElement('canvas');
+      savedTrails.width = this.canvas.width;
+      savedTrails.height = this.canvas.height;
+      const savedCtx = savedTrails.getContext('2d');
       savedCtx.globalAlpha = trailEffect;
-      savedCtx.drawImage(this.tempCanvas, 0, 0);
+      savedCtx.drawImage(this.trailBuffer, 0, 0);
       savedCtx.globalAlpha = 1.0;
+
+      // Clear trail buffer and draw back decayed trails
+      this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
+      this.trailBufferCtx.drawImage(savedTrails, 0, 0);
+    } else {
+      // No trails, just clear
+      this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
     }
 
-    // Clear temp canvas - this will hold accumulated trails + new stars
-    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
-
-    // Draw back the decayed trails
-    if (savedStars) {
-      this.tempCtx.drawImage(savedStars, 0, 0);
-    }
-
-    // Draw new stars on top (they accumulate with the trails in tempCanvas)
+    // Draw new stars into trail buffer
     this.stars.forEach((star) => {
       const p = this._project(star.x, star.y, star.z);
       if (p.scale <= 0) return;
@@ -428,18 +436,19 @@ export default class Starfield {
       const size = star.baseSize * p.scale;
       const brightness = Math.min(1, p.scale * 0.7);
 
-      this.tempCtx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
-      this.tempCtx.beginPath();
-      this.tempCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
-      this.tempCtx.fill();
+      this.trailBufferCtx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
+      this.trailBufferCtx.beginPath();
+      this.trailBufferCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      this.trailBufferCtx.fill();
     });
 
-    // Now compose the final frame on main canvas
-    // 1. Clear and draw fresh gradient (never composited with itself)
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this._drawBackgroundGradient();
+    // Step 3-4: Compose final frame on tempCanvas (gradient + trails)
+    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+    this._drawBackgroundGradient(this.tempCtx);
+    this.tempCtx.drawImage(this.trailBuffer, 0, 0);
 
-    // 2. Draw stars with accumulated trails on top of gradient
+    // Step 5: Copy to main canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.drawImage(this.tempCanvas, 0, 0);
   }
 
