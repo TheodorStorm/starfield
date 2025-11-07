@@ -387,6 +387,12 @@ export default class Starfield {
   _render() {
     const { trailEffect, starColors } = this.config;
 
+    // TEST: Verify fresh code is loading - check console for this message
+    if (!this._testMessageShown) {
+      console.log('🔴 FRESH CODE LOADED - Build timestamp:', new Date().toISOString());
+      this._testMessageShown = true;
+    }
+
     // Create trail buffer (stores only stars on transparent background)
     if (!this.trailBuffer) {
       this.trailBuffer = document.createElement('canvas');
