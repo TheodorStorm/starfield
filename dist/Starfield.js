@@ -452,10 +452,9 @@ export default class Starfield {
       this.tempCtx.fill();
     });
 
-    // Step 3: Add new stars to trailBuffer using 'lighter' blend mode
-    // 'lighter' mode prevents alpha feedback loop that occurs with 'source-over'
-    // when stars overlap their own trails (additive blending instead of alpha compositing)
-    this.trailBufferCtx.globalCompositeOperation = 'lighter';
+    // Step 3: Replace trailBuffer content using 'copy' mode
+    // 'copy' replaces pixels entirely, preventing any alpha accumulation
+    this.trailBufferCtx.globalCompositeOperation = 'copy';
     this.trailBufferCtx.drawImage(this.tempCanvas, 0, 0);
     this.trailBufferCtx.globalCompositeOperation = 'source-over';
 
