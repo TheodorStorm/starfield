@@ -415,7 +415,7 @@ export default class Starfield {
       // Apply subtle background pull to eliminate accumulation artifacts
       // This ensures trails fully decay to background instead of leaving permanent residue
       // caused by 8-bit color quantization rounding errors
-      this.ctx.globalAlpha = 0.02; // 2% background "pull" per frame
+      this.ctx.globalAlpha = 0.05; // 5% background "pull" per frame
       this._drawBackgroundGradient();
       this.ctx.globalAlpha = 1.0; // Reset
     }
