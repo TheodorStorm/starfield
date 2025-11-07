@@ -420,9 +420,12 @@ export default class Starfield {
       savedCtx.drawImage(this.trailBuffer, 0, 0);
       savedCtx.globalAlpha = 1.0;
 
-      // Clear trail buffer and draw back decayed trails
+      // Clear trail buffer and draw back decayed trails using 'copy' mode
+      // 'copy' mode prevents alpha accumulation from source-over compositing
       this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
+      this.trailBufferCtx.globalCompositeOperation = 'copy';
       this.trailBufferCtx.drawImage(savedTrails, 0, 0);
+      this.trailBufferCtx.globalCompositeOperation = 'source-over'; // Reset for drawing new stars
     } else {
       // No trails, just clear
       this.trailBufferCtx.clearRect(0, 0, this.trailBuffer.width, this.trailBuffer.height);
