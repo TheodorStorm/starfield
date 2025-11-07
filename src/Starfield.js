@@ -398,23 +398,29 @@ export default class Starfield {
       this.tempCanvas.height = this.canvas.height;
     }
 
-    // If we have trail effect, save old stars at reduced opacity for trails
-    let trailCanvas = null;
-    if (trailEffect > 0) {
-      trailCanvas = document.createElement('canvas');
-      trailCanvas.width = this.canvas.width;
-      trailCanvas.height = this.canvas.height;
-      const trailCtx = trailCanvas.getContext('2d');
+    // Save old stars (with accumulated trails) at reduced opacity
+    let savedStars = null;
+    if (trailEffect > 0 && this.tempCanvas.width > 0) {
+      savedStars = document.createElement('canvas');
+      savedStars.width = this.canvas.width;
+      savedStars.height = this.canvas.height;
+      const savedCtx = savedStars.getContext('2d');
 
-      // Copy old stars at reduced opacity (tempCanvas contains only stars, no gradient)
-      trailCtx.globalAlpha = trailEffect;
-      trailCtx.drawImage(this.tempCanvas, 0, 0);
-      trailCtx.globalAlpha = 1.0;
+      // Copy tempCanvas at reduced opacity to create decay
+      savedCtx.globalAlpha = trailEffect;
+      savedCtx.drawImage(this.tempCanvas, 0, 0);
+      savedCtx.globalAlpha = 1.0;
     }
 
-    // Clear temp canvas and draw new stars on it (transparent background, no gradient)
+    // Clear temp canvas - this will hold accumulated trails + new stars
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
 
+    // Draw back the decayed trails
+    if (savedStars) {
+      this.tempCtx.drawImage(savedStars, 0, 0);
+    }
+
+    // Draw new stars on top (they accumulate with the trails in tempCanvas)
     this.stars.forEach((star) => {
       const p = this._project(star.x, star.y, star.z);
       if (p.scale <= 0) return;
@@ -433,12 +439,7 @@ export default class Starfield {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this._drawBackgroundGradient();
 
-    // 2. Draw old stars (trails) if enabled
-    if (trailEffect > 0 && trailCanvas) {
-      this.ctx.drawImage(trailCanvas, 0, 0);
-    }
-
-    // 3. Draw new stars on top
+    // 2. Draw stars with accumulated trails on top of gradient
     this.ctx.drawImage(this.tempCanvas, 0, 0);
   }
 
