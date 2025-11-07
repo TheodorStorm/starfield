@@ -452,11 +452,9 @@ export default class Starfield {
       this.tempCtx.fill();
     });
 
-    // Step 3: Replace trailBuffer content using 'copy' mode
-    // 'copy' replaces pixels entirely, preventing any alpha accumulation
-    this.trailBufferCtx.globalCompositeOperation = 'copy';
+    // Step 3: Add new stars to decayed trails using 'source-over'
+    // This composites new stars on top of the decayed trails in trailBuffer
     this.trailBufferCtx.drawImage(this.tempCanvas, 0, 0);
-    this.trailBufferCtx.globalCompositeOperation = 'source-over';
 
     // Step 4: Compose final frame on main canvas (gradient + trails + new stars)
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
