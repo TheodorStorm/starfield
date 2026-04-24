@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-24
+
+### Fixed
+- Trails now fully fade to the background instead of leaving dim residue. Replaced `source-over` RGB blending (which got stuck 1-2 units above bg due to 8-bit integer rounding) with `destination-out` alpha decay followed by `destination-over` gradient refill.
+- Stars now reset at the camera plane (`z = 0`) instead of `z = -200`, so projection scale no longer spikes to 3x right before the star vanishes.
+- Added a proximity brightness fade so stars dim smoothly into the reset point instead of disappearing at full brightness.
+- `updateConfig` now applies combined `starCount` + `starColors` / `starSize` updates correctly (previously the color/size branch was skipped when `starCount` was also passed).
+- `updateConfig` no longer stops and restarts the animation internally, eliminating a delta-time blip every time the optimizer retuned the star count.
+- `background` config is now validated at construction and via `updateConfig`; malformed gradients throw a clear error instead of crashing deep inside the render pipeline.
+
+### Changed
+- Version log is now printed once per page rather than once per instance.
+- FPS computation is performed once per frame and shared between the optimizer and `getCurrentFPS()`.
+- Rolling frame-timestamp window now covers the full 3-second continuous measurement duration with headroom.
+- Normalization constant changed from `deltaTime / 16.67` to `deltaTime * 60 / 1000` (removes a 0.02% speed bias).
+
+### Performance
+- `_render` no longer allocates an offscreen canvas and copies the main canvas to it on every frame.
+- `_update` mutates stars in place via a new `_resetStar` helper, avoiding a per-reset throwaway object allocation.
+
 ## [2.0.3] - 2025-10-24
 
 ### Documentation
