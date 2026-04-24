@@ -11,6 +11,7 @@ export default class Starfield {
    */
   static STORAGE_KEY = '@byteventures/starfield:optimized-count';
   static LEGACY_STORAGE_KEY = 'starfield-optimized-count'; // For migration
+  static _versionLogged = false;
 
   /**
    * Default configuration options
@@ -81,12 +82,17 @@ export default class Starfield {
     this.lastFrameTime = null; // For delta time calculation
 
     // Performance tracking for auto-optimization
+    const targetFPS = 60;
+    const continuousOptimizationDuration = 3000;
     this.performanceStats = {
       frameTimestamps: [],
       calibrationStartTime: null,
       initialCalibrationComplete: false,
-      targetFPS: 60,
+      targetFPS,
       currentFPS: 0,
+      measuredFPS: 0,
+      // Rolling window sized to cover the longest measurement window plus headroom.
+      maxFrameSamples: Math.ceil((continuousOptimizationDuration / 1000) * targetFPS) + 60,
       // Initial calibration (aggressive)
       initialCalibrationDuration: 1000, // 1 second for fast initial convergence
       initialCalibrationAttempts: 0,
@@ -94,7 +100,7 @@ export default class Starfield {
       // Continuous optimization (conservative)
       lastOptimizationTime: null,
       optimizationInterval: 10000, // 10 seconds between adjustments
-      continuousOptimizationDuration: 3000, // 3 seconds for stable measurements
+      continuousOptimizationDuration,
     };
 
     // Determine star count
@@ -113,8 +119,10 @@ export default class Starfield {
     this._boundResize = () => this.resize();
     window.addEventListener('resize', this._boundResize);
 
-    // Display version info
-    console.log(`Starfield v${VERSION} - ${REPO_URL}`);
+    if (!Starfield._versionLogged) {
+      console.log(`Starfield v${VERSION} - ${REPO_URL}`);
+      Starfield._versionLogged = true;
+    }
 
     // Auto-start if configured
     if (this.config.autoStart) {
@@ -228,6 +236,31 @@ export default class Starfield {
         validate(config.deviceDetection.desktop, 1, 10000, 'deviceDetection.desktop');
       }
     }
+
+    if (config.background !== undefined && config.background !== false) {
+      if (!this._isObject(config.background)) {
+        throw new Error('background must be false or a gradient config object');
+      }
+      if (config.background.type !== undefined && config.background.type !== 'radial') {
+        throw new Error(`Invalid background.type: only 'radial' is supported (got '${config.background.type}')`);
+      }
+      if (config.background.colors !== undefined) {
+        if (!Array.isArray(config.background.colors) || config.background.colors.length < 2) {
+          throw new Error('background.colors must be an array with at least 2 color stops');
+        }
+        config.background.colors.forEach((cs, i) => {
+          if (!this._isObject(cs)) {
+            throw new Error(`background.colors[${i}] must be an object with { stop, color }`);
+          }
+          if (typeof cs.stop !== 'number' || cs.stop < 0 || cs.stop > 1) {
+            throw new Error(`background.colors[${i}].stop must be a number between 0 and 1`);
+          }
+          if (typeof cs.color !== 'string') {
+            throw new Error(`background.colors[${i}].color must be a string`);
+          }
+        });
+      }
+    }
   }
 
   /**
@@ -326,22 +359,29 @@ export default class Starfield {
   }
 
   /**
-   * Create a new star object
+   * Randomize a star's position, size, and hue in place.
    * @private
    */
-  _createStar() {
+  _resetStar(star) {
     const { starSize, starColors } = this.config;
     const [minHue, maxHue] = Array.isArray(starColors.hue)
       ? starColors.hue
       : [starColors.hue, starColors.hue];
 
-    return {
-      x: (Math.random() - 0.5) * 2000,
-      y: (Math.random() - 0.5) * 2000,
-      z: Math.random() * 2000,
-      baseSize: starSize.min + Math.random() * (starSize.max - starSize.min),
-      hue: minHue + Math.random() * (maxHue - minHue),
-    };
+    star.x = (Math.random() - 0.5) * 2000;
+    star.y = (Math.random() - 0.5) * 2000;
+    star.z = Math.random() * 2000;
+    star.baseSize = starSize.min + Math.random() * (starSize.max - starSize.min);
+    star.hue = minHue + Math.random() * (maxHue - minHue);
+    return star;
+  }
+
+  /**
+   * Create a new star object
+   * @private
+   */
+  _createStar() {
+    return this._resetStar({});
   }
 
   /**
@@ -363,18 +403,15 @@ export default class Starfield {
    * @param {number} deltaTime - Time elapsed since last frame in milliseconds
    */
   _update(deltaTime) {
-    // Normalize to 60 FPS baseline (16.67ms per frame) for frame-rate independent movement
-    const speed = this.config.speed * (deltaTime / 16.67);
+    // Normalize to 60 FPS baseline for frame-rate independent movement
+    const speed = this.config.speed * deltaTime * 60 / 1000;
     for (let i = 0; i < this.stars.length; i++) {
       const star = this.stars[i];
       star.z -= speed;
-      if (star.z <= -200) {
-        const newStar = this._createStar();
-        star.x = newStar.x;
-        star.y = newStar.y;
-        star.z = newStar.z;
-        star.baseSize = newStar.baseSize;
-        star.hue = newStar.hue;
+      // Reset at the camera plane (z=0) so scale never exceeds 1 and stars
+      // don't pop to 3x size in the final few frames before disappearing.
+      if (star.z <= 0) {
+        this._resetStar(star);
       }
     }
   }
@@ -385,41 +422,34 @@ export default class Starfield {
    */
   _render() {
     const { trailEffect, starColors } = this.config;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
 
-    // Create temporary canvas for previous frame if not exists
-    if (!this.tempCanvas) {
-      this.tempCanvas = document.createElement('canvas');
-      this.tempCtx = this.tempCanvas.getContext('2d');
-    }
-
-    // Ensure temp canvas matches size
-    if (this.tempCanvas.width !== this.canvas.width || this.tempCanvas.height !== this.canvas.height) {
-      this.tempCanvas.width = this.canvas.width;
-      this.tempCanvas.height = this.canvas.height;
-    }
-
-    // Save current canvas to temp canvas
-    this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
-    this.tempCtx.drawImage(this.canvas, 0, 0);
-
-    // Clear and draw fresh gradient
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this._drawBackgroundGradient();
-
-    // Draw previous frame on top with reduced opacity for trail effect
     if (trailEffect > 0) {
-      this.ctx.globalAlpha = trailEffect; // Use trailEffect directly (0=no trails, 1=full trails)
-      this.ctx.drawImage(this.tempCanvas, 0, 0);
-      this.ctx.globalAlpha = 1.0; // Reset
+      // Fade prior frame by reducing its alpha channel, then refill the
+      // background underneath. Fading alpha (not RGB) lets residual pixels
+      // reach fully transparent via integer truncation, so trails vanish
+      // cleanly. A source-over blend at low globalAlpha cannot: its RGB
+      // math has fixed points 1-2 units off bg that rounding never leaves.
+      this.ctx.globalCompositeOperation = 'destination-out';
+      this.ctx.fillStyle = `rgba(0,0,0,${1 - trailEffect})`;
+      this.ctx.fillRect(0, 0, w, h);
+
+      this.ctx.globalCompositeOperation = 'destination-over';
+      this._drawBackgroundGradient();
+
+      this.ctx.globalCompositeOperation = 'source-over';
+    } else {
+      this.ctx.clearRect(0, 0, w, h);
+      this._drawBackgroundGradient();
     }
 
-    // Render each star
     this.stars.forEach((star) => {
       const p = this._project(star.x, star.y, star.z);
       if (p.scale <= 0) return;
 
       const size = star.baseSize * p.scale;
-      const brightness = Math.min(1, p.scale * 0.7);
+      const brightness = Math.min(1, p.scale * 0.7) * Math.min(1, star.z / 30);
 
       this.ctx.fillStyle = `hsla(${star.hue}, ${starColors.saturation}%, ${starColors.lightness}%, ${brightness})`;
       this.ctx.beginPath();
@@ -437,25 +467,21 @@ export default class Starfield {
 
     // Track frame timestamp for FPS measurement and delta time
     const now = performance.now();
-    const deltaTime = this.lastFrameTime ? now - this.lastFrameTime : 16.67; // Default to 60 FPS baseline
+    const deltaTime = this.lastFrameTime ? now - this.lastFrameTime : 1000 / 60;
     this.lastFrameTime = now;
 
     this.performanceStats.frameTimestamps.push(now);
 
-    // Keep only last 120 frames for rolling FPS calculation (2 seconds at 60 FPS)
-    if (this.performanceStats.frameTimestamps.length > 120) {
+    // Cap rolling window to cover the longest measurement duration, plus headroom.
+    if (this.performanceStats.frameTimestamps.length > this.performanceStats.maxFrameSamples) {
       this.performanceStats.frameTimestamps.shift();
     }
 
-    // Calculate current FPS continuously from rolling window
     if (this.performanceStats.frameTimestamps.length >= 10) {
       const timestamps = this.performanceStats.frameTimestamps;
-      let totalInterval = 0;
-      for (let i = 1; i < timestamps.length; i++) {
-        totalInterval += timestamps[i] - timestamps[i - 1];
-      }
-      const avgInterval = totalInterval / (timestamps.length - 1);
-      this.performanceStats.currentFPS = Math.round(1000 / avgInterval);
+      const avgInterval = (timestamps[timestamps.length - 1] - timestamps[0]) / (timestamps.length - 1);
+      this.performanceStats.measuredFPS = 1000 / avgInterval;
+      this.performanceStats.currentFPS = Math.round(this.performanceStats.measuredFPS);
     }
 
     // Start calibration timer on first frame
@@ -500,18 +526,9 @@ export default class Starfield {
       }
     }
 
-    // Calculate average FPS from collected timestamps
-    const timestamps = stats.frameTimestamps;
-    if (timestamps.length < 10) return; // Need enough samples
+    if (stats.frameTimestamps.length < 10) return;
 
-    // Calculate FPS from frame intervals
-    let totalInterval = 0;
-    for (let i = 1; i < timestamps.length; i++) {
-      totalInterval += timestamps[i] - timestamps[i - 1];
-    }
-    const avgInterval = totalInterval / (timestamps.length - 1);
-    const measuredFPS = 1000 / avgInterval;
-
+    const measuredFPS = stats.measuredFPS;
     const targetFPS = stats.targetFPS;
     const fpsRatio = measuredFPS / targetFPS;
     const maxStars = this.config.maxStarCount;
@@ -667,20 +684,17 @@ export default class Starfield {
   }
 
   /**
-   * Update configuration and restart if running
+   * Update configuration. Safe to call while running; the animation loop
+   * picks up the new state on the next frame without resetting delta time.
    * @param {Object} newConfig - New configuration options
    */
   updateConfig(newConfig) {
-    const wasRunning = this.isRunning;
-    if (wasRunning) this.stop();
-
     // Validate new config before merging
     this._validateConfig(newConfig);
 
     // Merge new config
     this.config = this._mergeDeep(this.config, newConfig);
 
-    // Recalculate star count if changed
     if (newConfig.starCount !== undefined) {
       const oldStarCount = this.starCount;
       this.starCount =
@@ -688,19 +702,17 @@ export default class Starfield {
           ? this._detectDeviceCapability()
           : this.config.starCount;
 
-      // Preserve existing stars, only add/remove as needed
       if (this.starCount > oldStarCount) {
-        // Increasing: add new stars
         const starsToAdd = this.starCount - oldStarCount;
         for (let i = 0; i < starsToAdd; i++) {
           this.stars.push(this._createStar());
         }
       } else if (this.starCount < oldStarCount) {
-        // Decreasing: remove stars from end
         this.stars.splice(this.starCount);
       }
-    } else if (newConfig.starColors || newConfig.starSize) {
-      // Update existing stars with new colors/sizes
+    }
+
+    if (newConfig.starColors || newConfig.starSize) {
       const { starSize, starColors } = this.config;
       const [minHue, maxHue] = Array.isArray(starColors.hue)
         ? starColors.hue
@@ -720,8 +732,6 @@ export default class Starfield {
     if (newConfig.background !== undefined) {
       this.backgroundGradient = null;
     }
-
-    if (wasRunning) this.start();
   }
 
   /**
